@@ -1,7 +1,7 @@
 """Business logic for application CRUD and data transforms."""
 
 import json
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 
 
 def generate_id(seq_val: int) -> str:
@@ -156,10 +156,12 @@ def _parse_jsonb(val):
 
 
 def to_dashboard_shape(row: dict, timeline: list[dict]) -> dict:
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     last_updated = row.get("last_updated") or now
     if isinstance(last_updated, date) and not isinstance(last_updated, datetime):
-        last_updated = datetime.combine(last_updated, datetime.min.time())
+        last_updated = datetime.combine(last_updated, datetime.min.time(), tzinfo=timezone.utc)
+    elif isinstance(last_updated, datetime) and last_updated.tzinfo is None:
+        last_updated = last_updated.replace(tzinfo=timezone.utc)
     days_in_stage = max(0, (now - last_updated).days)
 
     checks = _parse_jsonb(row.get("checks")) or {}
