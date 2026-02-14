@@ -1,7 +1,13 @@
 """Business logic for application CRUD and data transforms."""
 
+import html
 import json
 from datetime import datetime, date, timedelta, timezone
+
+
+def escape_html(value: str) -> str:
+    """Neutralise characters that could be interpreted as HTML/script markup."""
+    return html.escape(value, quote=True)
 
 
 def generate_id(seq_val: int) -> str:
@@ -243,6 +249,10 @@ async def create_application(pool, body: dict) -> str:
 
             personal = body.get("personal") or {}
 
+            safe_first = escape_html(personal.get("firstName") or "")
+            safe_last = escape_html(personal.get("lastName") or "")
+            safe_email = escape_html(personal.get("email") or "")
+
             await conn.execute(
                 """INSERT INTO applications (
                     id, title, first_name, middle_names, last_name,
@@ -269,10 +279,10 @@ async def create_application(pool, body: dict) -> str:
                 )""",
                 app_id,
                 personal.get("title") or None,
-                personal.get("firstName"),
+                safe_first,
                 personal.get("middleNames") or None,
-                personal.get("lastName"),
-                personal.get("email"),
+                safe_last,
+                safe_email,
                 personal.get("phone") or None,
                 personal.get("dob") or None,
                 personal.get("gender") or None,
@@ -387,7 +397,7 @@ async def update_application(pool, app_id: str, updates: dict) -> bool:
             f"UPDATE applications SET {', '.join(sets)} WHERE id = ${idx} RETURNING id",
             *vals,
         )
-        return "UPDATE" in result
+        return result != "UPDATE 0"
 
 
 async def delete_application(pool, app_id: str) -> bool:
@@ -399,10 +409,11 @@ async def delete_application(pool, app_id: str) -> bool:
 
 
 async def add_timeline_event(pool, app_id: str, event: str, event_type: str = "action") -> dict:
+    safe_event = escape_html(event)
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
             """INSERT INTO timeline_events (application_id, event, type)
                VALUES ($1, $2, $3) RETURNING *""",
-            app_id, event, event_type,
+            app_id, safe_event, event_type,
         )
         return dict(row)
